@@ -1,3 +1,11 @@
+---
+title: Patient Triage Env
+emoji: 🏥
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
 # Patient Complaint Triage Environment
 
 An OpenEnv-compatible environment where an AI agent learns to triage hospital patient complaints.
