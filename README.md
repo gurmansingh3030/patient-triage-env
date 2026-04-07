@@ -6,6 +6,7 @@ colorTo: green
 sdk: docker
 pinned: false
 ---
+
 # Patient Complaint Triage Environment
 
 An OpenEnv-compatible environment where an AI agent learns to triage hospital patient complaints.
@@ -53,13 +54,13 @@ The agent reads real-world style patient complaints and must:
 |------|-------|
 | task_1_urgency | 0.85 |
 | task_2_routing | 0.875 |
-| task_3_full_triage | ~0.90 |
+| task_3_full_triage | 0.85 |
 
 ## Setup
 ```bash
-git clone <your-repo>
+git clone https://huggingface.co/spaces/gurmansingh3030/patient-triage-env
 cd patient-triage-env
 pip install -r requirements.txt
 ```
 
-## Environment Variables# patient-triage-env
+## Environment Variables
