@@ -32,20 +32,19 @@ Respond ONLY in this JSON format:
   "reasoning": "brief reason"
 }}"""
 
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=200,
-            temperature=0.0
-        )
-
-        raw = response.choices[0].message.content.strip()
-
         try:
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+                temperature=0.0
+            )
+            raw = response.choices[0].message.content.strip()
             parsed = json.loads(raw)
             action = Action(**parsed)
-        except:
-            action = Action(urgency="low")
+        except Exception as e:
+            print(json.dumps({"type": "[ERROR]", "task_id": task_id, "error": str(e)}))
+            action = Action(urgency="low", department="general", action_plan="schedule_appointment")
 
         obs_next, reward, done, info = env.step(action)
         total_score += reward.score
