@@ -1,15 +1,12 @@
-from dotenv import load_dotenv
-load_dotenv()
-
 import os
 import json
 from openai import OpenAI
 from environment import PatientTriageEnv
 from tasks import Action
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.groq.com/openai/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "llama-3.1-8b-instant")
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
 
