@@ -16,7 +16,7 @@ def run_task(task_id: str):
     total_score = 0.0
     steps = 0
 
-    print(json.dumps({"type": "[START]", "task_id": task_id}))
+    print(json.dumps({"type": "[START]", "task_id": task_id}), flush=True)
 
     while True:
         prompt = f"""You are a hospital triage assistant.
@@ -43,7 +43,7 @@ Respond ONLY in this JSON format:
             parsed = json.loads(raw)
             action = Action(**parsed)
         except Exception as e:
-            print(json.dumps({"type": "[ERROR]", "task_id": task_id, "error": str(e)}))
+            print(json.dumps({"type": "[ERROR]", "task_id": task_id, "error": str(e)}), flush=True)
             action = Action(urgency="low", department="general", action_plan="schedule_appointment")
 
         obs_next, reward, done, info = env.step(action)
@@ -57,7 +57,7 @@ Respond ONLY in this JSON format:
             "score": reward.score,
             "feedback": reward.feedback,
             "cumulative_score": info["cumulative_score"]
-        }))
+        }), flush=True)
 
         if done:
             break
@@ -69,11 +69,11 @@ Respond ONLY in this JSON format:
         "task_id": task_id,
         "total_steps": steps,
         "final_score": final_avg
-    }))
+    }), flush=True)
     return final_avg
 
 if __name__ == "__main__":
     scores = {}
     for task in ["task_1_urgency", "task_2_routing", "task_3_full_triage"]:
         scores[task] = run_task(task)
-    print(json.dumps({"type": "[SUMMARY]", "scores": scores}))
+    print(json.dumps({"type": "[SUMMARY]", "scores": scores}), flush=True)
