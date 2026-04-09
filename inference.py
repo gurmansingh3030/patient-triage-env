@@ -1,20 +1,15 @@
 import os
 import json
 import random
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
+from openai import OpenAI
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.groq.com/openai/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "llama-3.1-8b-instant")
 HF_TOKEN = os.getenv("HF_TOKEN")
-
-# ─── Inline Models ────────────────────────────────────────────
-
-class Observation(BaseModel):
-    task_id: str
-    complaint_id: str
-    complaint_text: str
-    task_description: str
+BENCHMARK = "patient_triage"
+SUCCESS_SCORE_THRESHOLD = 0.5
 
 class Action(BaseModel):
     urgency: str
@@ -25,8 +20,6 @@ class Action(BaseModel):
 class Reward(BaseModel):
     score: float
     feedback: str
-
-# ─── Inline Data ──────────────────────────────────────────────
 
 COMPLAINTS = [
     {"id": "C001", "text": "Patient has severe chest pain radiating to left arm since 2 hours.", "true_urgency": "critical", "true_department": "cardiology", "true_action": "immediate_admission"},
@@ -39,54 +32,34 @@ COMPLAINTS = [
     {"id": "C008", "text": "Diabetic patient, blood sugar 450, feeling dizzy.", "true_urgency": "critical", "true_department": "endocrinology", "true_action": "immediate_admission"},
 ]
 
-# ─── Inline Graders ───────────────────────────────────────────
-
 def grade_task1(action, complaint):
     if action.urgency == complaint["true_urgency"]:
-        return Reward(score=1.0, feedback="Correct urgency classification!")
+        return Reward(score=1.0, feedback="Correct")
     both_serious = {"critical", "high"}
     if action.urgency in both_serious and complaint["true_urgency"] in both_serious:
-        return Reward(score=0.4, feedback="Close — both serious but wrong level.")
-    return Reward(score=0.0, feedback=f"Wrong. Expected {complaint['true_urgency']}.")
+        return Reward(score=0.4, feedback="Close")
+    return Reward(score=0.0, feedback="Wrong")
 
 def grade_task2(action, complaint):
     score = 0.0
-    parts = []
     if action.urgency == complaint["true_urgency"]:
         score += 0.5
-        parts.append("Urgency correct (+0.5)")
-    else:
-        parts.append(f"Urgency wrong (expected {complaint['true_urgency']})")
     if action.department == complaint["true_department"]:
         score += 0.5
-        parts.append("Department correct (+0.5)")
-    else:
-        parts.append(f"Department wrong (expected {complaint['true_department']})")
-    return Reward(score=round(score, 2), feedback=" | ".join(parts))
+    return Reward(score=round(score, 2), feedback="graded")
 
 def grade_task3(action, complaint):
     score = 0.0
-    parts = []
     if action.urgency == complaint["true_urgency"]:
         score += 0.3
-        parts.append("Urgency correct (+0.3)")
-    else:
-        parts.append(f"Urgency wrong")
     if action.department == complaint["true_department"]:
         score += 0.3
-        parts.append("Department correct (+0.3)")
-    else:
-        parts.append(f"Department wrong")
     valid_actions = ["immediate_admission", "urgent_consultation", "schedule_appointment"]
     if action.action_plan == complaint["true_action"]:
         score += 0.4
-        parts.append("Action plan correct (+0.4)")
     elif action.action_plan in valid_actions:
         score += 0.1
-        parts.append("Valid but wrong action (+0.1)")
-    else:
-        parts.append("Invalid action")
-    return Reward(score=round(score, 2), feedback=" | ".join(parts))
+    return Reward(score=round(score, 2), feedback="graded")
 
 TASK_INFO = {
     "task_1_urgency": {"grader": grade_task1, "desc": "Classify the complaint as: critical, high, or low urgency."},
@@ -94,26 +67,40 @@ TASK_INFO = {
     "task_3_full_triage": {"grader": grade_task3, "desc": "Classify urgency, route to department, AND generate action plan."},
 }
 
-def get_action_from_llm(prompt):
-    """Get action from LLM — fallback to rule-based if no API key."""
+def log_start(task, env, model):
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+def log_step(step, action, reward, done, error=None):
+    error_val = error if error else "null"
+    done_val = str(done).lower()
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}", flush=True)
+
+def log_end(success, steps, score, rewards):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+
+def get_action(complaint, desc):
     if not HF_TOKEN:
-        # Rule-based fallback when no API key
-        text = prompt.lower()
-        if any(w in text for w in ["severe", "critical", "emergency", "450", "allergic", "chest pain"]):
+        text = complaint["text"].lower()
+        if any(w in text for w in ["severe", "chest pain", "allergic", "blood sugar 450"]):
             urgency = "critical"
-        elif any(w in text for w in ["high fever", "fell", "difficulty breathing", "hip"]):
+        elif any(w in text for w in ["fever", "fell", "difficulty breathing"]):
             urgency = "high"
         else:
             urgency = "low"
-        return Action(
-            urgency=urgency,
-            department="general",
-            action_plan="schedule_appointment",
-            reasoning="rule-based fallback"
-        )
-    
-    from openai import OpenAI
+        return Action(urgency=urgency, department="general", action_plan="schedule_appointment")
+
     client = OpenAI(api_key=HF_TOKEN, base_url=API_BASE_URL)
+    prompt = f"""You are a hospital triage assistant.
+Patient Complaint: {complaint['text']}
+Task: {desc}
+Respond ONLY in this JSON format:
+{{
+  "urgency": "critical" or "high" or "low",
+  "department": "cardiology" or "pediatrics" or "orthopedics" or "emergency" or "general" or "dermatology" or "endocrinology",
+  "action_plan": "immediate_admission" or "urgent_consultation" or "schedule_appointment",
+  "reasoning": "brief reason"
+}}"""
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=[{"role": "user", "content": prompt}],
@@ -124,60 +111,44 @@ def get_action_from_llm(prompt):
     parsed = json.loads(raw)
     return Action(**parsed)
 
-def run_task(task_id: str):
+def run_task(task_id):
     complaints = COMPLAINTS.copy()
     random.shuffle(complaints)
     grader = TASK_INFO[task_id]["grader"]
     desc = TASK_INFO[task_id]["desc"]
-    total_score = 0.0
-    steps = 0
+    rewards: List[float] = []
+    steps_taken = 0
+    score = 0.0
+    success = False
 
-    print(json.dumps({"type": "[START]", "task_id": task_id}), flush=True)
+    log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
 
-    for complaint in complaints:
-        prompt = f"""You are a hospital triage assistant.
+    try:
+        for step, complaint in enumerate(complaints, 1):
+            done = step == len(complaints)
+            try:
+                action = get_action(complaint, desc)
+                error = None
+            except Exception as e:
+                action = Action(urgency="low", department="general", action_plan="schedule_appointment")
+                error = str(e)
 
-Patient Complaint: {complaint['text']}
-Task: {desc}
+            reward_obj = grader(action, complaint)
+            reward = reward_obj.score
+            rewards.append(reward)
+            steps_taken = step
 
-Respond ONLY in this JSON format:
-{{
-  "urgency": "critical" or "high" or "low",
-  "department": "cardiology" or "pediatrics" or "orthopedics" or "emergency" or "general" or "dermatology" or "endocrinology",
-  "action_plan": "immediate_admission" or "urgent_consultation" or "schedule_appointment",
-  "reasoning": "brief reason"
-}}"""
+            log_step(step=step, action=action.urgency, reward=reward, done=done, error=error)
 
-        try:
-            action = get_action_from_llm(prompt)
-        except Exception as e:
-            print(json.dumps({"type": "[ERROR]", "error": str(e)}), flush=True)
-            action = Action(urgency="low", department="general", action_plan="schedule_appointment")
+        score = sum(rewards) / len(rewards) if rewards else 0.0
+        score = min(max(score, 0.0), 1.0)
+        success = score >= SUCCESS_SCORE_THRESHOLD
 
-        reward = grader(action, complaint)
-        total_score += reward.score
-        steps += 1
+    finally:
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
-        print(json.dumps({
-            "type": "[STEP]",
-            "task_id": task_id,
-            "step": steps,
-            "score": reward.score,
-            "feedback": reward.feedback,
-            "cumulative_score": round(total_score, 3)
-        }), flush=True)
-
-    final_avg = round(total_score / steps, 3)
-    print(json.dumps({
-        "type": "[END]",
-        "task_id": task_id,
-        "total_steps": steps,
-        "final_score": final_avg
-    }), flush=True)
-    return final_avg
+    return score
 
 if __name__ == "__main__":
-    scores = {}
     for task in ["task_1_urgency", "task_2_routing", "task_3_full_triage"]:
-        scores[task] = run_task(task)
-    print(json.dumps({"type": "[SUMMARY]", "scores": scores}), flush=True)
+        run_task(task)
