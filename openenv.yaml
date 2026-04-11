@@ -1,10 +1,12 @@
 name: patient-triage-env
-version: "1.0.0"
+version: "2.0.0"
 description: >
   AI agent environment for hospital patient complaint triage.
-  Agent must classify urgency, route to departments, and generate
-  action plans for real-world patient complaints.
-author: your-hf-username
+  Agent classifies urgency, routes to departments, generates
+  action plans, and provides medical reasoning for real-world
+  patient complaints. Designed to train agents for healthcare
+  triage assistance in resource-limited settings.
+author: gurmansingh3030
 tasks:
   - id: task_1_urgency
     difficulty: easy
@@ -15,6 +17,15 @@ tasks:
   - id: task_3_full_triage
     difficulty: hard
     description: Full triage with urgency, department, and action plan
+  - id: task_4_reasoning
+    difficulty: hard
+    description: Full triage with detailed medical reasoning
 observation_space: text
 action_space: structured_json
 reward_range: [0.0, 1.0]
+tags:
+  - healthcare
+  - triage
+  - medical
+  - india
+  - real-world

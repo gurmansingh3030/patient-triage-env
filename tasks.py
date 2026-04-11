@@ -2,8 +2,6 @@ from pydantic import BaseModel
 from typing import Optional
 from data import COMPLAINTS
 
-# ─── Pydantic Models ───────────────────────────────────────────
-
 class Observation(BaseModel):
     task_id: str
     complaint_id: str
@@ -11,16 +9,14 @@ class Observation(BaseModel):
     task_description: str
 
 class Action(BaseModel):
-    urgency: str                          # critical / high / low
-    department: Optional[str] = None      # needed for medium + hard
-    action_plan: Optional[str] = None     # needed for hard only
+    urgency: str
+    department: Optional[str] = None
+    action_plan: Optional[str] = None
     reasoning: Optional[str] = None
 
 class Reward(BaseModel):
-    score: float                          # 0.0 to 1.0
+    score: float
     feedback: str
-
-# ─── Task 1: Easy — Urgency Classification ─────────────────────
 
 class Task1Grader:
     task_id = "task_1_urgency"
@@ -29,15 +25,10 @@ class Task1Grader:
     def grade(self, action: Action, complaint: dict) -> Reward:
         if action.urgency == complaint["true_urgency"]:
             return Reward(score=1.0, feedback="Correct urgency classification!")
-        
-        # Partial credit — critical/high mix gets 0.4
         both_serious = {"critical", "high"}
         if action.urgency in both_serious and complaint["true_urgency"] in both_serious:
-            return Reward(score=0.4, feedback="Close — both are serious but urgency level wrong.")
-        
+            return Reward(score=0.4, feedback="Close — both serious but wrong level.")
         return Reward(score=0.0, feedback=f"Wrong. Expected {complaint['true_urgency']}.")
-
-# ─── Task 2: Medium — Urgency + Department Routing ─────────────
 
 class Task2Grader:
     task_id = "task_2_routing"
@@ -45,25 +36,18 @@ class Task2Grader:
 
     def grade(self, action: Action, complaint: dict) -> Reward:
         score = 0.0
-        feedback_parts = []
-
-        # Urgency = 50% weight
+        parts = []
         if action.urgency == complaint["true_urgency"]:
             score += 0.5
-            feedback_parts.append("Urgency correct (+0.5)")
+            parts.append("Urgency correct (+0.5)")
         else:
-            feedback_parts.append(f"Urgency wrong (expected {complaint['true_urgency']})")
-
-        # Department = 50% weight
+            parts.append(f"Urgency wrong (expected {complaint['true_urgency']})")
         if action.department == complaint["true_department"]:
             score += 0.5
-            feedback_parts.append("Department correct (+0.5)")
+            parts.append("Department correct (+0.5)")
         else:
-            feedback_parts.append(f"Department wrong (expected {complaint['true_department']})")
-
-        return Reward(score=round(score, 2), feedback=" | ".join(feedback_parts))
-
-# ─── Task 3: Hard — Full Triage with Action Plan ───────────────
+            parts.append(f"Department wrong (expected {complaint['true_department']})")
+        return Reward(score=round(score, 2), feedback=" | ".join(parts))
 
 class Task3Grader:
     task_id = "task_3_full_triage"
@@ -73,37 +57,64 @@ class Task3Grader:
 
     def grade(self, action: Action, complaint: dict) -> Reward:
         score = 0.0
-        feedback_parts = []
-
-        # Urgency = 30%
+        parts = []
         if action.urgency == complaint["true_urgency"]:
             score += 0.3
-            feedback_parts.append("Urgency correct (+0.3)")
+            parts.append("Urgency correct (+0.3)")
         else:
-            feedback_parts.append(f"Urgency wrong (expected {complaint['true_urgency']})")
-
-        # Department = 30%
+            parts.append(f"Urgency wrong (expected {complaint['true_urgency']})")
         if action.department == complaint["true_department"]:
             score += 0.3
-            feedback_parts.append("Department correct (+0.3)")
+            parts.append("Department correct (+0.3)")
         else:
-            feedback_parts.append(f"Department wrong (expected {complaint['true_department']})")
-
-        # Action plan = 40%
+            parts.append(f"Department wrong (expected {complaint['true_department']})")
         if action.action_plan == complaint["true_action"]:
             score += 0.4
-            feedback_parts.append("Action plan correct (+0.4)")
+            parts.append("Action plan correct (+0.4)")
         elif action.action_plan in self.VALID_ACTIONS:
-            score += 0.1  # partial — valid action but wrong one
-            feedback_parts.append(f"Valid but wrong action (expected {complaint['true_action']}) (+0.1)")
+            score += 0.15
+            parts.append(f"Valid but wrong action (+0.15)")
         else:
-            feedback_parts.append(f"Invalid/missing action plan (expected {complaint['true_action']})")
+            parts.append(f"Invalid action (expected {complaint['true_action']})")
+        return Reward(score=round(score, 2), feedback=" | ".join(parts))
 
-        return Reward(score=round(score, 2), feedback=" | ".join(feedback_parts))
+class Task4Grader:
+    task_id = "task_4_reasoning"
+    description = "Full triage with reasoning — classify urgency, department, action plan, AND explain why."
 
+    VALID_ACTIONS = ["immediate_admission", "urgent_consultation", "schedule_appointment"]
+
+    def grade(self, action: Action, complaint: dict) -> Reward:
+        score = 0.0
+        parts = []
+        if action.urgency == complaint["true_urgency"]:
+            score += 0.25
+            parts.append("Urgency correct (+0.25)")
+        else:
+            parts.append(f"Urgency wrong (expected {complaint['true_urgency']})")
+        if action.department == complaint["true_department"]:
+            score += 0.25
+            parts.append("Department correct (+0.25)")
+        else:
+            parts.append(f"Department wrong (expected {complaint['true_department']})")
+        if action.action_plan == complaint["true_action"]:
+            score += 0.25
+            parts.append("Action plan correct (+0.25)")
+        elif action.action_plan in self.VALID_ACTIONS:
+            score += 0.1
+            parts.append(f"Valid but wrong action (+0.1)")
+        else:
+            parts.append(f"Invalid action")
+        if action.reasoning and len(action.reasoning) > 20:
+            score += 0.25
+            parts.append("Reasoning provided (+0.25)")
+        else:
+            parts.append("Missing/short reasoning (0.0)")
+        return Reward(score=round(score, 2), feedback=" | ".join(parts))
 
 TASKS = {
     "task_1_urgency": Task1Grader(),
     "task_2_routing": Task2Grader(),
     "task_3_full_triage": Task3Grader(),
+    "task_4_reasoning": Task4Grader(),
 }
