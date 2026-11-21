@@ -7,74 +7,69 @@ sdk: docker
 pinned: false
 ---
 
-# 🏥 Patient Complaint Triage Environment
+# Patient Complaint Triage Environment
 
-> An OpenEnv-compatible AI agent training environment for hospital patient complaint triage — built for the Meta PyTorch Hackathon x Scaler SST, Round 1.
+An OpenEnv-compatible environment where an agent reads a patient complaint and does what a triage nurse would: decide how urgent it is, pick the department, and pick the next action. Built for the Meta PyTorch Hackathon x Scaler SST, Round 1.
 
-## 🎯 Overview
+- Live Space: https://huggingface.co/spaces/gurmansingh3030/patient-triage-env
+- API docs: https://gurmansingh3030-patient-triage-env.hf.space/docs
+- GitHub: https://github.com/gurmansingh3030/patient-triage-env
 
-In real hospitals, triage nurses must quickly assess patient complaints and decide:
-- How urgent is this? (critical / high / low)
-- Which department should handle it?
-- What immediate action is needed?
+## Why
 
-This environment trains AI agents to perform this exact task — making triage decisions that match expert medical judgment. With 40% of emergency department visits being non-urgent, intelligent triage can save lives and reduce healthcare costs.
+A large share of ER visits are non-urgent, and in India there aren't enough trained triage staff to sort them. I wanted an environment where an LLM agent gets scored on triage decisions, so it can be tested (and later trained) on this.
 
-## 🚀 Live Demo
+## Tasks
 
-- **HuggingFace Space:** https://huggingface.co/spaces/gurmansingh3030/patient-triage-env
-- **API Docs:** https://gurmansingh3030-patient-triage-env.hf.space/docs
-- **GitHub:** https://github.com/gurmansingh3030/patient-triage-env
+| Task | Difficulty | What the agent does |
+|---|---|---|
+| `task_1_urgency` | Easy | Classify urgency: critical / high / low |
+| `task_2_routing` | Medium | Urgency + department |
+| `task_3_full_triage` | Hard | Urgency + department + action plan |
 
-## 📊 Tasks
-
-| Task | Difficulty | Description | Max Score |
-|------|-----------|-------------|-----------|
-| `task_1_urgency` | 🟢 Easy | Classify complaint urgency (critical/high/low) | 1.0 |
-| `task_2_routing` | 🟡 Medium | Classify urgency + route to correct department | 1.0 |
-| `task_3_full_triage` | 🔴 Hard | Full triage: urgency + department + action plan | 1.0 |
-
-## 📈 Baseline Scores
-
-| Task | Score | Model |
-|------|-------|-------|
-| task_1_urgency | 0.85 | llama-3.1-8b-instant |
-| task_2_routing | 0.875 | llama-3.1-8b-instant |
-| task_3_full_triage | 0.85 | llama-3.1-8b-instant |
-
-## 🔍 Observation Space
+## Observation
 
 ```json
 {
   "task_id": "string",
   "complaint_id": "string",
-  "complaint_text": "string — real patient complaint",
-  "task_description": "string — what the agent must do"
+  "complaint_text": "the patient's complaint",
+  "task_description": "what the agent has to do"
 }
 ```
 
-## ⚡ Action Space
+## Action
 
 ```json
 {
   "urgency": "critical | high | low",
   "department": "cardiology | pediatrics | orthopedics | emergency | general | dermatology | endocrinology",
   "action_plan": "immediate_admission | urgent_consultation | schedule_appointment",
-  "reasoning": "string — agent's explanation"
+  "reasoning": "short explanation"
 }
 ```
 
-## 🏆 Reward Function
+## Rewards
 
-| Task | Scoring Logic |
-|------|--------------|
-| Task 1 | 1.0 correct, 0.4 partial (critical/high mix), 0.0 wrong |
+| Task | Scoring |
+|---|---|
+| Task 1 | 1.0 correct, 0.4 if it confuses critical and high, 0.0 otherwise |
 | Task 2 | 0.5 urgency + 0.5 department |
 | Task 3 | 0.3 urgency + 0.3 department + 0.4 action plan |
 
-Partial rewards ensure meaningful signal throughout the trajectory — not just at episode end.
+Partial credit is there so the agent gets a signal even when it's only half right.
 
-## 🛠️ Setup
+## Baseline
+
+Run with `llama-3.1-8b-instant` through Groq:
+
+| Task | Score |
+|---|---|
+| task_1_urgency | 0.85 |
+| task_2_routing | 0.875 |
+| task_3_full_triage | 0.85 |
+
+## Setup
 
 ```bash
 git clone https://github.com/gurmansingh3030/patient-triage-env
@@ -82,21 +77,21 @@ cd patient-triage-env
 pip install -r requirements.txt
 ```
 
-## 🔑 Environment Variables
+Set these environment variables:
 
-```bash
-API_BASE_URL=https://api.groq.com/openai/v1   # LLM endpoint
-MODEL_NAME=llama-3.1-8b-instant               # Model to use
-HF_TOKEN=your_api_key                         # Your API key
+```
+API_BASE_URL=https://api.groq.com/openai/v1
+MODEL_NAME=llama-3.1-8b-instant
+HF_TOKEN=your_api_key
 ```
 
-## ▶️ Run Baseline
+Run the baseline:
 
 ```bash
 python3 inference.py
 ```
 
-## 🐳 Docker
+## Docker
 
 ```bash
 docker build -t patient-triage-env .
@@ -107,23 +102,22 @@ docker run \
   patient-triage-env
 ```
 
-## 🌍 Real-World Impact
-
-- **40%** of ER visits are non-urgent — intelligent triage reduces overcrowding
-- **India context** — 1.3 billion people, shortage of trained triage staff
-- **Multilingual potential** — environment designed to support Hindi/English complaints
-- Trained agents can assist ASHA workers and rural health centers
-
-## 📁 Project Structure
+## Files
 
 ```
 patient-triage-env/
-├── inference.py        # Baseline agent script
-├── environment.py      # Core OpenEnv environment
-├── tasks.py            # 3 tasks + graders
-├── data.py             # Patient complaints dataset
-├── app.py              # FastAPI server
-├── openenv.yaml        # OpenEnv metadata
-├── Dockerfile          # Container config
-└── requirements.txt    # Dependencies
+├── inference.py      # baseline agent
+├── environment.py    # the environment
+├── tasks.py          # tasks and graders
+├── data.py           # patient complaints
+├── app.py            # FastAPI server
+├── openenv.yaml      # OpenEnv metadata
+├── Dockerfile
+└── requirements.txt
 ```
+
+## Limitations / next steps
+
+- The complaint set is small, so scores are noisy.
+- Only English complaints right now. Hindi/English support is the next thing I want to add.
+- Not a medical tool. It's a benchmark for agents, not for real triage decisions.
